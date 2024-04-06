@@ -72,9 +72,6 @@
 
 /* Author: Sachin Chitta, David Lu!!, Ugo Cupcic */
 
-#include <class_loader/class_loader.h>
-
-//#include <tf/transform_datatypes.h>
 #include <tf_conversions/tf_kdl.h>
 #include <kdl_parser/kdl_parser.hpp>
 
@@ -88,7 +85,8 @@
 #include <ur_kinematics/ur_moveit_plugin.h>
 #include <ur_kinematics/ur_kin.h>
 
-//register KDLKinematics as a KinematicsBase implementation
+// register URKinematicsPlugin as a KinematicsBase implementation
+#include <class_loader/class_loader.hpp>
 CLASS_LOADER_REGISTER_CLASS(ur_kinematics::URKinematicsPlugin, kinematics::KinematicsBase)
 
 namespace ur_kinematics
@@ -138,7 +136,7 @@ void URKinematicsPlugin::getRandomConfiguration(const KDL::JntArray &seed_state,
   }
 
   joint_model_group_->getVariableRandomPositionsNearBy(state_->getRandomNumberGenerator(), values, near, consistency_limits_mimic);
-  
+
   for (std::size_t i = 0; i < dimension_; ++i)
   {
     bool skip = false;
@@ -165,31 +163,18 @@ bool URKinematicsPlugin::checkConsistency(const KDL::JntArray& seed_state,
   return true;
 }
 
-bool URKinematicsPlugin::initialize(const std::string &robot_description,
-                                     const std::string& group_name,
-                                     const std::string& base_frame,
-                                     const std::string& tip_frame,
-                                     double search_discretization)
+bool URKinematicsPlugin::initialize(const moveit::core::RobotModel& robot_model,
+                                    const std::string& group_name,
+                                    const std::string& base_frame,
+                                    const std::vector<std::string>& tip_frames,
+                                    double search_discretization)
 {
-  setValues(robot_description, group_name, base_frame, tip_frame, search_discretization);
+  storeValues(robot_model, group_name, base_frame, tip_frames, search_discretization);
 
-  ros::NodeHandle private_handle("~");
-  rdf_loader::RDFLoader rdf_loader(robot_description_);
-  const srdf::ModelSharedPtr &srdf = rdf_loader.getSRDF();
-  const urdf::ModelInterfaceSharedPtr &urdf_model = rdf_loader.getURDF();
-
-  if (!urdf_model || !srdf)
-  {
-    ROS_ERROR_NAMED("kdl","URDF and SRDF must be loaded for KDL kinematics solver to work.");
-    return false;
-  }
-
-  robot_model_.reset(new robot_model::RobotModel(urdf_model, srdf));
-
-  robot_model::JointModelGroup* joint_model_group = robot_model_->getJointModelGroup(group_name);
+  const robot_model::JointModelGroup* joint_model_group = robot_model_->getJointModelGroup(group_name);
   if (!joint_model_group)
     return false;
-  
+
   if(!joint_model_group->isChain())
   {
     ROS_ERROR_NAMED("kdl","Group '%s' is not a chain", group_name.c_str());
@@ -203,7 +188,7 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
 
   KDL::Tree kdl_tree;
 
-  if (!kdl_parser::treeFromUrdfModel(*urdf_model, kdl_tree))
+  if (!kdl_parser::treeFromUrdfModel(*robot_model.getURDF(), kdl_tree))
   {
     ROS_ERROR_NAMED("kdl","Could not initialize tree object");
     return false;
@@ -250,12 +235,9 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   double epsilon;
   bool position_ik;
 
-  private_handle.param("max_solver_iterations", max_solver_iterations, 500);
-  private_handle.param("epsilon", epsilon, 1e-5);
-  private_handle.param(group_name+"/position_only_ik", position_ik, false);
-  ROS_DEBUG_NAMED("kdl","Looking in private handle: %s for param name: %s",
-            private_handle.getNamespace().c_str(),
-            (group_name+"/position_only_ik").c_str());
+  lookupParam("max_solver_iterations", max_solver_iterations, 500);
+  lookupParam("epsilon", epsilon, 1e-5);
+  lookupParam(group_name+"/position_only_ik", position_ik, false);
 
   if(position_ik)
     ROS_INFO_NAMED("kdl","Using position only ik");
@@ -271,7 +253,7 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   for (std::size_t i = 0; i < kdl_chain_.getNrOfSegments(); ++i)
   {
     const robot_model::JointModel *jm = robot_model_->getJointModel(kdl_chain_.segments[i].getJoint().getName());
-    
+
     //first check whether it belongs to the set of active joints in the group
     if (jm->getMimic() == NULL && jm->getVariableCount() > 0)
     {
@@ -323,7 +305,7 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   max_solver_iterations_ = max_solver_iterations;
   epsilon_ = epsilon;
 
-  private_handle.param<std::string>("arm_prefix", arm_prefix_, "");
+  lookupParam("arm_prefix", arm_prefix_, std::string(""));
 
   ur_joint_names_.push_back(arm_prefix_ + "shoulder_pan_joint");
   ur_joint_names_.push_back(arm_prefix_ + "shoulder_lift_joint");
@@ -349,14 +331,14 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   for(int i=1; i<6; i++) {
     cur_ur_joint_ind = getJointIndex(ur_joint_names_[i]);
     if(cur_ur_joint_ind < 0) {
-      ROS_ERROR_NAMED("kdl", 
-        "Kin chain provided in model doesn't contain standard UR joint '%s'.", 
+      ROS_ERROR_NAMED("kdl",
+        "Kin chain provided in model doesn't contain standard UR joint '%s'.",
         ur_joint_names_[i].c_str());
       return false;
     }
     if(cur_ur_joint_ind != last_ur_joint_ind + 1) {
-      ROS_ERROR_NAMED("kdl", 
-        "Kin chain provided in model doesn't have proper serial joint order: '%s'.", 
+      ROS_ERROR_NAMED("kdl",
+        "Kin chain provided in model doesn't have proper serial joint order: '%s'.",
         ur_joint_names_[i].c_str());
       return false;
     }
@@ -369,15 +351,13 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
 
   // weights for redundant solution selection
   ik_weights_.resize(6);
-  if(private_handle.hasParam("ik_weights")) {
-    private_handle.getParam("ik_weights", ik_weights_);
-  } else {
+  if(!lookupParam("ik_weights", ik_weights_, ik_weights_)) {
     ik_weights_[0] = 1.0;
     ik_weights_[1] = 1.0;
-    ik_weights_[2] = 0.1;
-    ik_weights_[3] = 0.1;
-    ik_weights_[4] = 0.3;
-    ik_weights_[5] = 0.3;
+    ik_weights_[2] = 1.0;
+    ik_weights_[3] = 1.0;
+    ik_weights_[4] = 1.0;
+    ik_weights_[5] = 1.0;
   }
 
   active_ = true;
@@ -634,7 +614,7 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
     // Convert into query for analytic solver
     tf::poseMsgToKDL(ik_pose, kdl_ik_pose);
     kdl_ik_pose_ur_chain = pose_base.Inverse() * kdl_ik_pose * pose_tip.Inverse();
-    
+
     kdl_ik_pose_ur_chain.Make4x4((double*) homo_ik_pose);
 #if KDL_OLD_BUG_FIX
     // in older versions of KDL, setting this flag might be necessary
@@ -643,10 +623,10 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
     /////////////////////////////////////////////////////////////////////////////
 
     // Do the analytic IK
-    num_sols = inverse((double*) homo_ik_pose, (double*) q_ik_sols, 
+    num_sols = inverse((double*) homo_ik_pose, (double*) q_ik_sols,
                        jnt_pos_test(ur_joint_inds_start_+5));
-    
-    
+
+
     uint16_t num_valid_sols;
     std::vector< std::vector<double> > q_ik_valid_sols;
     for(uint16_t i=0; i<num_sols; i++)
@@ -654,11 +634,11 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
       bool valid = true;
       std::vector< double > valid_solution;
       valid_solution.assign(6,0.0);
-      
+
       for(uint16_t j=0; j<6; j++)
       {
         if((q_ik_sols[i][j] <= ik_chain_info_.limits[j].max_position) && (q_ik_sols[i][j] >= ik_chain_info_.limits[j].min_position))
-        { 
+        {
           valid_solution[j] = q_ik_sols[i][j];
           valid = true;
           continue;
@@ -681,14 +661,14 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
           break;
         }
       }
-      
+
       if(valid)
       {
         q_ik_valid_sols.push_back(valid_solution);
       }
     }
-     
-     
+
+
     // use weighted absolute deviations to determine the solution closest the seed state
     std::vector<idx_double> weighted_diffs;
     for(uint16_t i=0; i<q_ik_valid_sols.size(); i++) {

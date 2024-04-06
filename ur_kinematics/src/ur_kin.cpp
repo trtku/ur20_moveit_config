@@ -13,6 +13,36 @@ namespace ur_kinematics {
     }
     const double PI = M_PI;
 
+    //#define UR30_PARAMS
+    #ifdef UR30_PARAMS
+    const double d1 =  0.2363;
+    const double a2 = -0.6370;
+    const double a3 = -0.5037;
+    const double d4 =  0.2010;
+    const double d5 =  0.1593;
+    const double d6 =  0.1543;
+    #endif
+
+    //#define UR20_PARAMS
+    #ifdef UR20_PARAMS
+    const double d1 =  0.2363;
+    const double a2 = -0.8620;
+    const double a3 = -0.7287;
+    const double d4 =  0.2010;
+    const double d5 =  0.1593;
+    const double d6 =  0.1543;
+    #endif
+
+    //#define UR16e_PARAMS
+    #ifdef UR16e_PARAMS
+    const double d1 =  0.1807;
+    const double a2 = -0.4784;
+    const double a3 = -0.36;
+    const double d4 =  0.17415;
+    const double d5 =  0.11985;
+    const double d6 =  0.11655;
+    #endif
+
     //#define UR10_PARAMS
     #ifdef UR10_PARAMS
     const double d1 =  0.1273;
@@ -21,6 +51,16 @@ namespace ur_kinematics {
     const double d4 =  0.163941;
     const double d5 =  0.1157;
     const double d6 =  0.0922;
+    #endif
+
+    //#define UR10e_PARAMS
+    #ifdef UR10e_PARAMS
+    const double d1 =  0.1807;
+    const double a2 = -0.6127;
+    const double a3 = -0.57155;
+    const double d4 =  0.17415;
+    const double d5 =  0.11985;
+    const double d6 =  0.11655;
     #endif
 
     //#define UR5_PARAMS
@@ -32,7 +72,17 @@ namespace ur_kinematics {
     const double d5 =  0.09465;
     const double d6 =  0.0823;
     #endif
-    
+
+    //#define UR5e_PARAMS
+    #ifdef UR5e_PARAMS
+    const double d1 =  0.1625;
+    const double a2 = -0.425;
+    const double a3 = -0.3922;
+    const double d4 =  0.1333;
+    const double d5 =  0.0997;
+    const double d6 =  0.0996;
+    #endif
+
     //#define UR3_PARAMS
     #ifdef UR3_PARAMS
     const double d1 =  0.1519;
@@ -42,37 +92,39 @@ namespace ur_kinematics {
     const double d5 =  0.08535;
     const double d6 =  0.0819;
     #endif
+
+    //#define UR3e_PARAMS
+    #ifdef UR3e_PARAMS
+    const double d1 =  0.15185;
+    const double a2 = -0.24355;
+    const double a3 = -0.2132;
+    const double d4 =  0.13105;
+    const double d5 =  0.08535;
+    const double d6 =  0.0921;
+    #endif
   }
 
   void forward(const double* q, double* T) {
     double s1 = sin(*q), c1 = cos(*q); q++;
-    double q234 = *q, s2 = sin(*q), c2 = cos(*q); q++;
-    double s3 = sin(*q), c3 = cos(*q); q234 += *q; q++;
-    q234 += *q; q++;
+    double q23 = *q, q234 = *q, s2 = sin(*q), c2 = cos(*q); q++;
+    double s3 = sin(*q), c3 = cos(*q); q23 += *q; q234 += *q; q++;
+    double s4 = sin(*q), c4 = cos(*q); q234 += *q; q++;
     double s5 = sin(*q), c5 = cos(*q); q++;
     double s6 = sin(*q), c6 = cos(*q); 
+    double s23 = sin(q23), c23 = cos(q23);
     double s234 = sin(q234), c234 = cos(q234);
-    *T = ((c1*c234-s1*s234)*s5)/2.0 - c5*s1 + ((c1*c234+s1*s234)*s5)/2.0; T++;
-    *T = (c6*(s1*s5 + ((c1*c234-s1*s234)*c5)/2.0 + ((c1*c234+s1*s234)*c5)/2.0) - 
-          (s6*((s1*c234+c1*s234) - (s1*c234-c1*s234)))/2.0); T++;
-    *T = (-(c6*((s1*c234+c1*s234) - (s1*c234-c1*s234)))/2.0 - 
-          s6*(s1*s5 + ((c1*c234-s1*s234)*c5)/2.0 + ((c1*c234+s1*s234)*c5)/2.0)); T++;
-    *T = ((d5*(s1*c234-c1*s234))/2.0 - (d5*(s1*c234+c1*s234))/2.0 - 
-          d4*s1 + (d6*(c1*c234-s1*s234)*s5)/2.0 + (d6*(c1*c234+s1*s234)*s5)/2.0 - 
-          a2*c1*c2 - d6*c5*s1 - a3*c1*c2*c3 + a3*c1*s2*s3); T++;
-    *T = c1*c5 + ((s1*c234+c1*s234)*s5)/2.0 + ((s1*c234-c1*s234)*s5)/2.0; T++;
-    *T = (c6*(((s1*c234+c1*s234)*c5)/2.0 - c1*s5 + ((s1*c234-c1*s234)*c5)/2.0) + 
-          s6*((c1*c234-s1*s234)/2.0 - (c1*c234+s1*s234)/2.0)); T++;
-    *T = (c6*((c1*c234-s1*s234)/2.0 - (c1*c234+s1*s234)/2.0) - 
-          s6*(((s1*c234+c1*s234)*c5)/2.0 - c1*s5 + ((s1*c234-c1*s234)*c5)/2.0)); T++;
-    *T = ((d5*(c1*c234-s1*s234))/2.0 - (d5*(c1*c234+s1*s234))/2.0 + d4*c1 + 
-          (d6*(s1*c234+c1*s234)*s5)/2.0 + (d6*(s1*c234-c1*s234)*s5)/2.0 + d6*c1*c5 - 
-          a2*c2*s1 - a3*c2*c3*s1 + a3*s1*s2*s3); T++;
-    *T = ((c234*c5-s234*s5)/2.0 - (c234*c5+s234*s5)/2.0); T++;
-    *T = ((s234*c6-c234*s6)/2.0 - (s234*c6+c234*s6)/2.0 - s234*c5*c6); T++;
-    *T = (s234*c5*s6 - (c234*c6+s234*s6)/2.0 - (c234*c6-s234*s6)/2.0); T++;
-    *T = (d1 + (d6*(c234*c5-s234*s5))/2.0 + a3*(s2*c3+c2*s3) + a2*s2 - 
-         (d6*(c234*c5+s234*s5))/2.0 - d5*c234); T++;
+    *T = c234*c1*s5 - c5*s1; T++;
+    *T = c6*(s1*s5 + c234*c1*c5) - s234*c1*s6; T++;
+    *T = -s6*(s1*s5 + c234*c1*c5) - s234*c1*c6; T++;
+    *T = d6*c234*c1*s5 - a3*c23*c1 - a2*c1*c2 - d6*c5*s1 - d5*s234*c1 - d4*s1; T++;
+    *T = c1*c5 + c234*s1*s5; T++;
+    *T = -c6*(c1*s5 - c234*c5*s1) - s234*s1*s6; T++;
+    *T = s6*(c1*s5 - c234*c5*s1) - s234*c6*s1; T++;
+    *T = d6*(c1*c5 + c234*s1*s5) + d4*c1 - a3*c23*s1 - a2*c2*s1 - d5*s234*s1; T++;
+    *T = -s234*s5; T++;
+    *T = -c234*s6 - s234*c5*c6; T++;
+    *T = s234*c5*s6 - c234*c6; T++;
+    *T = d1 + a3*s23 + a2*s2 - d5*(c23*c4 - s23*s4) - d6*s5*(c23*s4 + s23*c4); T++;
     *T = 0.0; T++; *T = 0.0; T++; *T = 0.0; T++; *T = 1.0;
   }
 
