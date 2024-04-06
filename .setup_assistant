@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: ur_description
+    relative_path: urdf/ur20.xacro
+    xacro_args: ""
+  SRDF:
+    relative_path: config/ur20_robot.srdf
+  CONFIG:
+    author_name: Ko Tsuruta
+    author_email: ko.tsuruta@usi.ch
+    generated_timestamp: 1712341279
